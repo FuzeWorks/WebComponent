@@ -1,0 +1,30 @@
+{
+  "name": "fuzeworks/webcomponent",
+  "description": "FuzeWorks WebComponent",
+  "license": ["MIT"],
+  "authors": [
+    {
+      "name": "TechFuze",
+      "homepage": "https://techfuze.net"
+    },
+    {
+      "name": "FuzeWorks Community",
+      "homepage": "https://techfuze.net/fuzeworks/contributors"
+    }
+  ],
+  "require": {
+    "php": ">=7.1.0",
+    "fuzeworks/core": "dev-development",
+    "fuzeworks/mvcr": "dev-master"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^7",
+    "fuzeworks/tracycomponent": "dev-master"
+  },
+  "autoload": {
+    "psr-4": {
+      "FuzeWorks\\": "src/FuzeWorks/"
+    }
+  }
+
+}
