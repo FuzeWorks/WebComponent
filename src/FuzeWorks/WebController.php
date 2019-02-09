@@ -33,14 +33,36 @@
  *
  * @version Version 1.2.0
  */
-return [
-    'allow_get_input' => true,
-    'empty_global_arrays' => true,
-    'restore_global_arrays' => true,
-    'base_url' => '',
-    'permitted_uri_chars' => 'a-z 0-9~%.:_\-',
-    'charset' => 'UTF-8',
-    'compress_output' => false,
-    'cookie_prefix' => 'FWZ_',
-    'xss_clean' => true
-];
+
+namespace FuzeWorks;
+
+class WebController extends Controller
+{
+
+    /**
+     * @var Input
+     */
+    protected $input;
+
+    /**
+     * @var Output
+     */
+    protected $output;
+
+    /**
+     * @var URI
+     */
+    protected $uri;
+
+    /**
+     * WebView constructor.
+     */
+    public function __construct()
+    {
+        parent::__construct();
+        $this->input = Factory::getInstance()->input;
+        $this->output = Factory::getInstance()->output;
+        $this->uri = Factory::getInstance()->uri;
+    }
+
+}

@@ -36,9 +36,20 @@
 
 namespace FuzeWorks;
 
+use FuzeWorks\Exception\EventException;
+use FuzeWorks\Exception\Exception;
+use FuzeWorks\Exception\NotFoundException;
+use FuzeWorks\Exception\WebException;
 
 class WebComponent implements iComponent
 {
+
+    /**
+     * Whether WebComponent is configured to handle a web request
+     *
+     * @var bool
+     */
+    public static $willHandleRequest = false;
 
     public function getName(): string
     {
@@ -49,8 +60,10 @@ class WebComponent implements iComponent
     {
         return [
             'web' => $this,
+            'security' => '\FuzeWorks\Security',
             'input' => '\FuzeWorks\Input',
-            'output' => '\FuzeWorks\Output'
+            'output' => '\FuzeWorks\Output',
+            'uri' => '\FuzeWorks\URI',
         ];
     }
 
@@ -63,18 +76,103 @@ class WebComponent implements iComponent
         // Add dependencies
         $configurator->addComponent(new MVCRComponent());
 
-        // Invoke methods to prepare system for HTTP calls
-        $configurator->call('logger', 'setLoggerTemplate', null, 'logger_http');
-
         // Add fallback config directory
         $configurator->addDirectory(
             dirname(__DIR__) . DIRECTORY_SEPARATOR . 'Config',
             'config',
             Priority::LOWEST
         );
+
+        // If WebComponent will handle a request, add some calls to the configurator
+        if (self::$willHandleRequest)
+        {
+            // Invoke methods to prepare system for HTTP calls
+            $configurator->call('logger', 'setLoggerTemplate', null, 'logger_http');
+        }
     }
 
     public function onCreateContainer(Factory $container)
     {
+    }
+
+    public function init()
+    {
+        // First init UTF8
+        UTF8::init();
+    }
+
+    public function enableComponent()
+    {
+        self::$willHandleRequest = true;
+    }
+
+    public function disableComponent()
+    {
+        self::$willHandleRequest = false;
+    }
+
+    /**
+     * @throws WebException
+     */
+    public function routeWebRequest(): bool
+    {
+        if (!self::$willHandleRequest)
+            throw new WebException("Could not route web request. WebComponent is not configured to handle requests");
+
+        // Set the output to display when shutting down
+        try {
+            Events::addListener(function () {
+                /** @var Output $output */
+                Logger::logInfo("Parsing output...");
+                $output = Factory::getInstance()->output;
+                $output->display();
+            }, 'coreShutdownEvent', Priority::NORMAL);
+        } catch (EventException $e) {
+            throw new WebException("Could not route web request. coreShutdownEvent threw EventException: '".$e->getMessage()."'");
+        }
+
+        /** @var Router $router */
+        $router = Factory::getInstance()->router;
+
+        /** @var URI $uriObject */
+        $uriObject = Factory::getInstance()->uri;
+        $uri = $uriObject->uriString();
+
+        /** @var Output $output */
+        $output = Factory::getInstance()->output;
+
+        // Attempt to load the requested page
+        try {
+            $viewOutput = $router->route($uri);
+        } catch (NotFoundException $e) {
+            Logger::logWarning("Requested page not found. Requesting Error/error404 View");
+            $output->setStatusHeader(404);
+
+            // Request 404 page=
+            try {
+                $viewOutput = $router->route('Error/error404');
+            } catch (NotFoundException $e) {
+                // If still resulting in an error, do something else
+                $viewOutput = 'ERROR 404. Page was not found.';
+            } catch (Exception $e) {
+                Logger::exceptionHandler($e, false);
+                $viewOutput = 'ERROR 404. Page was not found.';
+            }
+        } catch (Exception $e) {
+            Logger::exceptionHandler($e, false);
+            $output->setStatusHeader(500);
+            try {
+                $viewOutput = $router->route('Error/error500');
+            } catch (Exception $error500Exception) {
+                Logger::exceptionHandler($error500Exception, false);
+                $viewOutput = 'ERROR 500. Page could not be loaded.';
+            }
+        }
+
+        // Append the output
+        if (!empty($viewOutput))
+            $output->appendOutput($viewOutput);
+
+        return true;
     }
 }
