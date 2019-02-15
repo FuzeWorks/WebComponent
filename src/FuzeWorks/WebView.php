@@ -36,7 +36,7 @@
 
 namespace FuzeWorks;
 
-class WebView extends View
+abstract class WebView extends View
 {
     /**
      * @var Input
@@ -54,6 +54,11 @@ class WebView extends View
     protected $uri;
 
     /**
+     * @var Security
+     */
+    protected $security;
+
+    /**
      * WebView constructor.
      */
     public function __construct()
@@ -62,5 +67,6 @@ class WebView extends View
         $this->input = Factory::getInstance()->input;
         $this->output = Factory::getInstance()->output;
         $this->uri = Factory::getInstance()->uri;
+        $this->security = Factory::getInstance()->security;
     }
 }

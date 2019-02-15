@@ -68,9 +68,7 @@ class URI
         $this->input = Factory::getInstance()->input;
         $this->config = Factory::getInstance()->config->getConfig('web');
         if (WebComponent::$willHandleRequest)
-        {
             $this->determineUri();
-        }
     }
 
     public function determineUri()

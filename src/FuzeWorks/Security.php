@@ -45,6 +45,7 @@ use FuzeWorks\Exception\{ConfigException, SecurityException, Exception};
  * @author		EllisLab Dev Team
  * @copyright   Copyright (c) 2008 - 2014, EllisLab, Inc. (https://ellislab.com/)
  * @copyright   Copyright (c) 2014 - 2016, British Columbia Institute of Technology (http://bcit.ca/)
+ * @todo Complete rewrite
  */
 class Security {
 
@@ -200,7 +201,7 @@ class Security {
             $this->_csrf_set_hash();
         }
 
-        $this->charset = strtoupper(Factory::getInstance()->config->get('web')->charset);
+        $this->charset = strtoupper(Factory::getInstance()->config->get('web')->get('charset'));
     }
 
     // --------------------------------------------------------------------

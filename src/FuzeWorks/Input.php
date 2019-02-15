@@ -40,6 +40,9 @@ namespace FuzeWorks;
 use FuzeWorks\ConfigORM\ConfigORM;
 use Tracy\Debugger;
 
+/**
+ * @todo Implement remaining methods from OldInput
+ */
 class Input
 {
     /**
@@ -68,6 +71,10 @@ class Input
 
         // Set the configuration
         $this->webConfig = Factory::getInstance()->config->getConfig('web');
+
+        // If not handling requests, do not continue
+        if (!WebComponent::$willHandleRequest)
+            return;
 
         // Sanitize all global arrays
         $this->sanitizeGlobals();
@@ -116,6 +123,11 @@ class Input
         Debugger::errorHandler($severity, $message, $file, $line, $context);
     }
 
+    /**
+     * Restores global arrays before handling by processes outside of FuzeWorks
+     *
+     * @internal
+     */
     public function restoreGlobalArrays()
     {
         Logger::logInfo('Restoring global $_GET, $_POST, $_SERVER, $_COOKIE arrays');
@@ -235,6 +247,8 @@ class Input
     }
 
     /**
+     * Used to fetch variables from the global arrays
+     *
      * @param string $arrayName
      * @param null $index
      * @param bool $xssClean
@@ -266,55 +280,97 @@ class Input
         return ($xssClean === true ? $this->security->xss_clean($value) : $value);
     }
 
+    /**
+     * Fetch variables from the global $_GET array
+     *
+     * @param string|array|null $index
+     * @param bool $xssClean
+     * @return mixed
+     */
     public function get($index = null, bool $xssClean = true)
     {
         return $this->getFromInputArray('get', $index, $xssClean);
     }
 
+    /**
+     * Fetch variables from the global $_POST array
+     *
+     * @param string|array|null $index
+     * @param bool $xssClean
+     * @return mixed
+     */
     public function post($index = null, bool $xssClean = true)
     {
         return $this->getFromInputArray('post', $index, $xssClean);
     }
 
+    /**
+     * Fetch variables from the global $_POST or $_GET array. Tries POST first
+     *
+     * @param string|array|null $index
+     * @param bool $xssClean
+     * @return mixed
+     */
     public function postGet($index, bool $xssClean = true)
     {
         return isset($this->inputArray['post'][$index]) ? $this->post($index, $xssClean) : $this->get($index, $xssClean);
     }
 
+    /**
+     * Fetch variables from the global $_GET or $_POST array. Tries GET first
+     *
+     * @param string|array|null $index
+     * @param bool $xssClean
+     * @return mixed
+     */
     public function getPost($index, bool $xssClean = true)
     {
         return isset($this->inputArray['get'][$index]) ? $this->get($index, $xssClean) : $this->post($index, $xssClean);
     }
 
+    /**
+     * Fetch variables from the global $_COOKIE array
+     *
+     * @param string|array|null $index
+     * @param bool $xssClean
+     * @return mixed
+     */
     public function cookie($index = null, bool $xssClean = true)
     {
         return $this->getFromInputArray('cookie', $index, $xssClean);
     }
 
+    /**
+     * Fetch variables from the global $_SERVER array
+     *
+     * @param string|array|null $index
+     * @param bool $xssClean
+     * @return mixed
+     */
     public function server($index = null, bool $xssClean = true)
     {
         return $this->getFromInputArray('server', $index, $xssClean);
     }
 
     /**
-     * @todo Extend with OldInput functionality
+     * Fetch the HTTP_USER_AGENT variable from the $_SERVER array
+     *
+     * @param string|array|null $index
+     * @param bool $xssClean
+     * @return mixed
      */
-    public function ip()
-    {
-        $ip = '';
-        // Validate IP
-
-        $valid = (
-            (bool)filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) ||
-            (bool)filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)
-        );
-    }
-
     public function userAgent(bool $xssClean = true): string
     {
         return $this->getFromInputArray('server', 'HTTP_USER_AGENT', $xssClean);
     }
 
+    /**
+     * Fetch the REQUEST_METHOD variable from the $_SERVER array
+     *
+     * @param string|array|null $index
+     * @param bool $xssClean
+     * @return mixed
+     */
     public function method(bool $xssClean = true): string
     {
         return $this->getFromInputArray('server', 'REQUEST_METHOD', $xssClean);

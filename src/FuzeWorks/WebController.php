@@ -36,33 +36,6 @@
 
 namespace FuzeWorks;
 
-class WebController extends Controller
+abstract class WebController extends Controller
 {
-
-    /**
-     * @var Input
-     */
-    protected $input;
-
-    /**
-     * @var Output
-     */
-    protected $output;
-
-    /**
-     * @var URI
-     */
-    protected $uri;
-
-    /**
-     * WebView constructor.
-     */
-    public function __construct()
-    {
-        parent::__construct();
-        $this->input = Factory::getInstance()->input;
-        $this->output = Factory::getInstance()->output;
-        $this->uri = Factory::getInstance()->uri;
-    }
-
 }

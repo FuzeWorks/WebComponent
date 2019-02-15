@@ -38,9 +38,11 @@ namespace FuzeWorks;
 
 
 use FuzeWorks\ConfigORM\ConfigORM;
-use FuzeWorks\Event\HelperLoadEvent;
 use FuzeWorks\Exception\OutputException;
 
+/**
+ * @todo Implement caching
+ */
 class Output
 {
 

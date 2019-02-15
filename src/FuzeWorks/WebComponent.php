@@ -38,12 +38,14 @@ namespace FuzeWorks;
 
 use FuzeWorks\Exception\EventException;
 use FuzeWorks\Exception\Exception;
+use FuzeWorks\Exception\HaltException;
 use FuzeWorks\Exception\NotFoundException;
+use FuzeWorks\Exception\OutputException;
+use FuzeWorks\Exception\RouterException;
 use FuzeWorks\Exception\WebException;
 
 class WebComponent implements iComponent
 {
-
     /**
      * Whether WebComponent is configured to handle a web request
      *
@@ -67,10 +69,6 @@ class WebComponent implements iComponent
         ];
     }
 
-    /**
-     * @param Configurator $configurator
-     * @todo WebComponent will not always be running when added to FuzeWorks, move this into a separate method
-     */
     public function onAddComponent(Configurator $configurator)
     {
         // Add dependencies
@@ -95,23 +93,41 @@ class WebComponent implements iComponent
     {
     }
 
+    /**
+     * On initializing, Initialize UTF8 first, since it's a dependency for other componentClasses
+     */
     public function init()
     {
         // First init UTF8
         UTF8::init();
     }
 
+    /**
+     * Enable the WebComponent to prepare for handling requests
+     */
     public function enableComponent()
     {
         self::$willHandleRequest = true;
     }
 
+    /**
+     * Disable the WebComponent so it won't prepare for handling requests
+     */
     public function disableComponent()
     {
         self::$willHandleRequest = false;
     }
 
     /**
+     * Handle a Web request.
+     *
+     * Retrieves URI string, routes this URI using the provided routes,
+     * appends output and adds listener to view output on shutdown.
+     *
+     * @return bool
+     * @throws HaltException
+     * @throws OutputException
+     * @throws RouterException
      * @throws WebException
      */
     public function routeWebRequest(): bool
@@ -119,31 +135,32 @@ class WebComponent implements iComponent
         if (!self::$willHandleRequest)
             throw new WebException("Could not route web request. WebComponent is not configured to handle requests");
 
-        // Set the output to display when shutting down
         try {
+            // Set the output to display when shutting down
             Events::addListener(function () {
                 /** @var Output $output */
                 Logger::logInfo("Parsing output...");
                 $output = Factory::getInstance()->output;
                 $output->display();
             }, 'coreShutdownEvent', Priority::NORMAL);
+
+            // Create an error 500 page when a haltEvent is fired
+            Events::addListener([$this, 'haltEventListener'], 'haltExecutionEvent', Priority::NORMAL);
         } catch (EventException $e) {
             throw new WebException("Could not route web request. coreShutdownEvent threw EventException: '".$e->getMessage()."'");
         }
 
         /** @var Router $router */
-        $router = Factory::getInstance()->router;
-
-        /** @var URI $uriObject */
-        $uriObject = Factory::getInstance()->uri;
-        $uri = $uriObject->uriString();
-
+        /** @var URI $uri */
         /** @var Output $output */
+        $router = Factory::getInstance()->router;
+        $uri = Factory::getInstance()->uri;
         $output = Factory::getInstance()->output;
 
         // Attempt to load the requested page
         try {
-            $viewOutput = $router->route($uri);
+            $uriString = $uri->uriString();
+            $viewOutput = $router->route($uriString);
         } catch (NotFoundException $e) {
             Logger::logWarning("Requested page not found. Requesting Error/error404 View");
             $output->setStatusHeader(404);
@@ -158,15 +175,6 @@ class WebComponent implements iComponent
                 Logger::exceptionHandler($e, false);
                 $viewOutput = 'ERROR 404. Page was not found.';
             }
-        } catch (Exception $e) {
-            Logger::exceptionHandler($e, false);
-            $output->setStatusHeader(500);
-            try {
-                $viewOutput = $router->route('Error/error500');
-            } catch (Exception $error500Exception) {
-                Logger::exceptionHandler($error500Exception, false);
-                $viewOutput = 'ERROR 500. Page could not be loaded.';
-            }
         }
 
         // Append the output
@@ -174,5 +182,38 @@ class WebComponent implements iComponent
             $output->appendOutput($viewOutput);
 
         return true;
+    }
+
+    /**
+     * Listener for haltExecutionEvent
+     *
+     * Fired when FuzeWorks halts it's execution. Loads an error 500 page.
+     *
+     * @param $event
+     */
+    public function haltEventListener($event)
+    {
+        // Dependencies
+        /** @var Output $output */
+        /** @var Router $router */
+        /** @var Event $event */
+        $output = Factory::getInstance()->output;
+        $router = Factory::getInstance()->router;
+
+        // Cancel event
+        $event->setCancelled(true);
+
+        try {
+            // And handle consequences
+            Logger::logError("Execution halted. Providing error 500 page.");
+            $output->setStatusHeader(500);
+            $viewOutput = $router->route('Error/error500');
+        } catch (Exception $error500Exception) {
+            Logger::exceptionHandler($error500Exception, false);
+            $viewOutput = 'ERROR 500. Page could not be loaded.';
+        }
+
+        // Finally append output and shutdown
+        $output->appendOutput($viewOutput);
     }
 }
