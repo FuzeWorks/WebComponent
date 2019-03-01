@@ -37,7 +37,7 @@
 
 namespace FuzeWorks;
 use FuzeWorks\ConfigORM\ConfigORM;
-use FuzeWorks\Exception\{ConfigException, SecurityException, Exception};
+use FuzeWorks\Exception\{ConfigException, CSRFException, Exception};
 
 /**
  * Security Class
@@ -170,6 +170,13 @@ class Security {
     private $config;
 
     /**
+     * Input. A dependency for this class
+     *
+     * @var Input
+     */
+    private $input;
+
+    /**
      * Class constructor
      *
      * @throws ConfigException
@@ -178,6 +185,7 @@ class Security {
     public function init()
     {
         $this->config = Factory::getInstance()->config->get('security');
+        $this->input = Factory::getInstance()->input;
 
         // Is CSRF protection enabled?
         if ($this->config->csrf_protection)
@@ -210,14 +218,13 @@ class Security {
      * CSRF Verify
      *
      * @return	self
+     * @throws CSRFException
      */
     public function csrf_verify(): self
     {
         // If it's not a POST request we will set the CSRF cookie
-        if (strtoupper($_SERVER['REQUEST_METHOD']) !== 'POST')
-        {
+        if (strtoupper($this->input->server('REQUEST_METHOD')) !== 'POST')
             return $this->csrf_set_cookie();
-        }
 
         // Check if URI has been whitelisted from CSRF checks
         if ($exclude_uris = $this->config->csrf_exclude_uris)
@@ -232,22 +239,10 @@ class Security {
         }
 
         // Do the tokens exist in both the _POST and _COOKIE arrays?
-        if ( ! isset($_POST[$this->_csrf_token_name], $_COOKIE[$this->_csrf_cookie_name])
-            OR $_POST[$this->_csrf_token_name] !== $_COOKIE[$this->_csrf_cookie_name]) // Do the tokens match?
-        {
+        $token = $this->input->post($this->_csrf_token_name);
+        $cookie = $this->input->cookie($this->_csrf_cookie_name);
+        if ($token == null || $cookie == null || $token !== $cookie)
             $this->csrf_show_error();
-        }
-
-        // We kill this since we're done and we don't want to polute the _POST array
-        unset($_POST[$this->_csrf_token_name]);
-
-        // Regenerate on every submission?
-        if ($this->config->csrf_regenerate)
-        {
-            // Nothing should last forever
-            unset($_COOKIE[$this->_csrf_cookie_name]);
-            $this->_csrf_hash = NULL;
-        }
 
         $this->_csrf_set_hash();
         $this->csrf_set_cookie();
@@ -259,6 +254,22 @@ class Security {
     // --------------------------------------------------------------------
 
     /**
+     * CSRF Regenerate
+     *
+     * @throws ConfigException
+     * @return self
+     */
+    public function csrf_regenerate()
+    {
+        Logger::log("CSRF Hash is being regenerated...");
+        $this->_csrf_hash = null;
+        $this->_csrf_set_hash();
+        $this->csrf_set_cookie();
+
+        return $this;
+    }
+
+    /**
      * CSRF Set Cookie
      *
      * @codeCoverageIgnore
@@ -267,24 +278,25 @@ class Security {
     public function csrf_set_cookie()
     {
         $expire = time() + $this->_csrf_expire;
-        $cfg = Factory::getInstance()->config->get('main');
-        $secure_cookie = (bool) $cfg->cookie_secure;
+        $cfg = Factory::getInstance()->config->get('security');
+        $secure_cookie = (bool) $cfg->csrf_cookie_secure;
 
-        if ($secure_cookie && ! Core::isHttps())
-        {
+        if ($secure_cookie && !$this->input->isHttps())
             return $this;
-        }
 
         setcookie(
             $this->_csrf_cookie_name,
             $this->_csrf_hash,
             $expire,
-            $cfg->cookie_path,
-            $cfg->cookie_domain,
+            $cfg->csrf_cookie_path,
+            $cfg->csrf_cookie_domain,
             $secure_cookie,
-            $cfg->cookie_httponly
+            $cfg->csrf_cookie_httponly
         );
+
         Logger::log('CSRF cookie sent');
+
+        return $this;
     }
 
     // --------------------------------------------------------------------
@@ -293,11 +305,11 @@ class Security {
      * Show CSRF Error
      *
      * @return    void
-     * @throws SecurityException
+     * @throws CSRFException
      */
     public function csrf_show_error()
     {
-        throw new SecurityException('The action you have requested is not allowed.', 1);
+        throw new CSRFException('This action resulted in a Cross Site Reference Forgery warning. Request will be blocked...', 5);
     }
 
     // --------------------------------------------------------------------
@@ -726,57 +738,6 @@ class Security {
         }
         while ($str_compare !== $str);
         return $str;
-    }
-
-    // --------------------------------------------------------------------
-
-    /**
-     * Sanitize Filename
-     *
-     * @param	string	$str		Input file name
-     * @param 	bool	$relative_path	Whether to preserve paths
-     * @return	string
-     */
-    public function sanitize_filename($str, $relative_path = FALSE): string
-    {
-        $bad = $this->filename_bad_chars;
-
-        if ( ! $relative_path)
-        {
-            $bad[] = './';
-            $bad[] = '/';
-        }
-
-        $str = UTF8::removeInvisibleCharacters($str, FALSE);
-
-        do
-        {
-            $old = $str;
-            $str = str_replace($bad, '', $str);
-        }
-        while ($old !== $str);
-
-        return stripslashes($str);
-    }
-
-    // ----------------------------------------------------------------
-
-    /**
-     * Strip Image Tags
-     *
-     * @param	string	$str
-     * @return	string
-     */
-    public function strip_image_tags($str): string
-    {
-        return preg_replace(
-            array(
-                '#<img[\s/]+.*?src\s*=\s*(["\'])([^\\1]+?)\\1.*?\>#i',
-                '#<img[\s/]+.*?src\s*=\s*?(([^\s"\'=<>`]+)).*?\>#i'
-            ),
-            '\\2',
-            $str
-        );
     }
 
     // ----------------------------------------------------------------

@@ -36,12 +36,17 @@
 
 namespace FuzeWorks;
 
+use FuzeWorks\Event\HaltExecutionEvent;
+use FuzeWorks\Event\LayoutLoadEvent;
+use FuzeWorks\Event\RouterCallViewEvent;
+use FuzeWorks\Exception\CSRFException;
 use FuzeWorks\Exception\EventException;
 use FuzeWorks\Exception\Exception;
 use FuzeWorks\Exception\HaltException;
 use FuzeWorks\Exception\NotFoundException;
 use FuzeWorks\Exception\OutputException;
 use FuzeWorks\Exception\RouterException;
+use FuzeWorks\Exception\SecurityException;
 use FuzeWorks\Exception\WebException;
 
 class WebComponent implements iComponent
@@ -100,6 +105,9 @@ class WebComponent implements iComponent
     {
         // First init UTF8
         UTF8::init();
+
+        // Register some base events
+        Events::addListener([$this, 'layoutLoadEventListener'], 'layoutLoadEvent', Priority::NORMAL);
     }
 
     /**
@@ -137,7 +145,7 @@ class WebComponent implements iComponent
 
         try {
             // Set the output to display when shutting down
-            Events::addListener(function () {
+            Events::addListener(function ($event) {
                 /** @var Output $output */
                 Logger::logInfo("Parsing output...");
                 $output = Factory::getInstance()->output;
@@ -153,9 +161,25 @@ class WebComponent implements iComponent
         /** @var Router $router */
         /** @var URI $uri */
         /** @var Output $output */
+        /** @var Security $security */
         $router = Factory::getInstance()->router;
         $uri = Factory::getInstance()->uri;
         $output = Factory::getInstance()->output;
+        $security = Factory::getInstance()->security;
+
+        // And start logging the request
+        Logger::newLevel("Routing web request...");
+
+        // First test for Cross Site Request Forgery
+        try {
+            $security->csrf_verify();
+        } catch (SecurityException $exception) {
+            // If a SecurityException is thrown, first log it
+            Logger::logWarning("SecurityException thrown. Registering listener to verify handler in View");
+
+            // Register a listener
+            Events::addListener([$this, 'callViewEventListener'], 'routerCallViewEvent', Priority::HIGHEST, $exception);
+        }
 
         // Attempt to load the requested page
         try {
@@ -164,6 +188,9 @@ class WebComponent implements iComponent
         } catch (NotFoundException $e) {
             Logger::logWarning("Requested page not found. Requesting Error/error404 View");
             $output->setStatusHeader(404);
+
+            // Remove listener so that error pages won't be intercepted
+            Events::removeListener([$this, 'callViewEventListener'], 'routerCallViewEvent',Priority::HIGHEST);
 
             // Request 404 page=
             try {
@@ -175,13 +202,52 @@ class WebComponent implements iComponent
                 Logger::exceptionHandler($e, false);
                 $viewOutput = 'ERROR 404. Page was not found.';
             }
+        } catch (HaltException $e) {
+            Logger::logWarning("Requested page was denied. Requesting Error/error403 View.");
+            $output->setStatusHeader(403);
+
+            // Remove listener so that error pages won't be intercepted
+            Events::removeListener([$this, 'callViewEventListener'], 'routerCallViewEvent',Priority::HIGHEST);
+
+            try {
+                $viewOutput = $router->route('Error/error403');
+            } catch (NotFoundException $e) {
+                // If still resulting in an error, do something else
+                $viewOutput = 'ERROR 403. Forbidden.';
+            } catch (Exception $e) {
+                Logger::exceptionHandler($e, false);
+                $viewOutput = 'ERROR 403. Forbidden.';
+            }
         }
 
         // Append the output
         if (!empty($viewOutput))
             $output->appendOutput($viewOutput);
 
+        Logger::stopLevel();
         return true;
+    }
+
+    /**
+     * Listener for routerCallViewEvent
+     *
+     * Fired when a SecurityException is thrown. Verifies if a securityExceptionHandler() method exists.
+     * If not, the calling of the view is cancelled. If yes, the calling of the view depends on the
+     * result of the method
+     *
+     * @param RouterCallViewEvent $event
+     * @param SecurityException $exception
+     */
+    public function callViewEventListener(RouterCallViewEvent $event, SecurityException $exception)
+    {
+        /** @var RouterCallViewEvent $event */
+        // If the securityExceptionHandler method exists, cancel based on that methods output
+        if (method_exists($event->view, 'securityExceptionHandler'))
+            $event->setCancelled(!$event->view->securityExceptionHandler($exception));
+
+        // If not, cancel it immediately
+        else
+            $event->setCancelled(true);
     }
 
     /**
@@ -191,7 +257,7 @@ class WebComponent implements iComponent
      *
      * @param $event
      */
-    public function haltEventListener($event)
+    public function haltEventListener(HaltExecutionEvent $event)
     {
         // Dependencies
         /** @var Output $output */
@@ -202,6 +268,9 @@ class WebComponent implements iComponent
 
         // Cancel event
         $event->setCancelled(true);
+
+        // Remove listener so that error pages won't be intercepted
+        Events::removeListener([$this, 'callViewEventListener'], 'routerCallViewEvent',Priority::HIGHEST);
 
         try {
             // And handle consequences
@@ -215,5 +284,29 @@ class WebComponent implements iComponent
 
         // Finally append output and shutdown
         $output->appendOutput($viewOutput);
+    }
+
+    /**
+     * Listener for layoutLoadEvent
+     *
+     * Assigns variables from the WebComponent to Layout engines.
+     *
+     * @param $event
+     * @throws Exception\ConfigException
+     */
+    public function layoutLoadEventListener(LayoutLoadEvent $event)
+    {
+        // Dependencies
+        /** @var Security $security */
+        /** @var Config $config */
+        $security = Factory::getInstance()->security;
+        $config = Factory::getInstance()->config;
+
+        /** @var LayoutLoadEvent $event */
+        $event->assign('csrfHash', $security->get_csrf_hash());
+        $event->assign('csrfTokenName', $security->get_csrf_token_name());
+        $event->assign('siteURL', $config->getConfig('web')->get('base_url'));
+
+        Logger::logInfo("Assigned variables to TemplateEngine from WebComponent");
     }
 }

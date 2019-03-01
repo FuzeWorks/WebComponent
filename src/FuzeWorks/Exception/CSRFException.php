@@ -1,6 +1,6 @@
 <?php
 /**
- * FuzeWorks WebComponent.
+ * FuzeWorks Component.
  *
  * The FuzeWorks PHP FrameWork
  *
@@ -34,31 +34,9 @@
  * @version Version 1.2.0
  */
 
-return [
-    /*
-	|--------------------------------------------------------------------------
-	| Cross Site Request Forgery
-	|--------------------------------------------------------------------------
-	| Enables a CSRF cookie token to be set. When set to TRUE, token will be
-	| checked on a submitted form. If you are accepting user data, it is strongly
-	| recommended CSRF protection be enabled.
-	|
-	| 'csrf_token_name' = The token name
-	| 'csrf_cookie_name' = The cookie name
-	| 'csrf_expire' = The number in seconds the token should expire.
-	| 'csrf_regenerate' = Regenerate token on every submission
-	| 'csrf_exclude_uris' = Array of URIs which ignore CSRF checks
-	*/
-    'csrf_protection' => true,
-    'csrf_token_name' => 'fw_csrf_token',
-    'csrf_expire' => 7200,
-    'csrf_exclude_uris' => array(),
+namespace FuzeWorks\Exception;
 
-    // CSRF Cookie information
-    'csrf_cookie_name' => 'fw_csrf_cookie',
-    'csrf_cookie_prefix' => '',
-    'csrf_cookie_domain' => '',
-    'csrf_cookie_path' => '/',
-    'csrf_cookie_secure' => false,
-    'csrf_cookie_httponly' => false
-];
+
+class CSRFException extends SecurityException
+{
+}

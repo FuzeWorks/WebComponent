@@ -163,6 +163,9 @@ class Output
             ob_start('ob_gzhandler');
         }
 
+        // Remove the X-Powered-By header, since it's a security risk
+        header_remove("X-Powered-By");
+
         // Send all available headers
         if (!empty($this->headers))
             foreach ($this->headers as $header)

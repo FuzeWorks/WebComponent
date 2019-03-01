@@ -256,8 +256,8 @@ class Input
      */
     protected function getFromInputArray(string $arrayName, $index = null, bool $xssClean = true)
     {
-        // Clean XSS if requested manually or forced through configuration
-        $xssClean = $xssClean || $this->webConfig->get('xss_clean');
+        // Never run XSS clean if disabled by config
+        $xssClean = ($this->webConfig->get('xss_clean') == true ? $xssClean : false);
 
         // If the index is null, the entire array is requested
         $index = (!is_null($index) ? $index : array_keys($this->inputArray[$arrayName]));
@@ -375,6 +375,29 @@ class Input
     {
         return $this->getFromInputArray('server', 'REQUEST_METHOD', $xssClean);
     }
+
+    /**
+     * Is HTTPS?
+     *
+     * Determines if the application is accessed via an encrypted
+     * (HTTPS) connection.
+     *
+     * @return  bool
+     */
+    public function isHttps(): bool
+    {
+        if (!empty($this->inputArray['server']['HTTPS']) && strtolower($this->inputArray['server']['HTTPS']) !== 'off')
+            return true;
+
+        elseif (isset($this->inputArray['server']['HTTP_X_FORWARDED_PROTO']) && $this->inputArray['server']['HTTP_X_FORWARDED_PROTO'] === 'https')
+            return true;
+
+        elseif ( ! empty($this->inputArray['server']['HTTP_FRONT_END_HTTPS']) && strtolower($this->inputArray['server']['HTTP_FRONT_END_HTTPS']) !== 'off')
+            return true;
+
+        return false;
+    }
+
 
 
 }
