@@ -1,4 +1,4 @@
-<?php /** @noinspection ALL */
+<?php
 
 /**
  * FuzeWorks WebComponent.
@@ -38,7 +38,6 @@
 namespace FuzeWorks;
 
 use FuzeWorks\ConfigORM\ConfigORM;
-use Tracy\Debugger;
 
 /**
  * @todo Implement remaining methods from OldInput
@@ -83,44 +82,14 @@ class Input
         {
             if (class_exists('\FuzeWorks\TracyComponent', true) && \FuzeWorks\TracyComponent::isEnabled())
             {
-                set_exception_handler([$this, 'tracyExceptionHandler']);
-                set_error_handler([$this, 'tracyErrorHandler']);
+                Core::addExceptionHandler([$this, 'restoreGlobalArrays'], Priority::HIGHEST);
+                Core::addErrorHandler([$this, 'restoreGlobalArrays'], Priority::HIGHEST);
             }
             Events::addListener(
                 [$this, 'restoreGlobalArrays'],
                 'coreShutdownEvent', Priority::HIGHEST
             );
         }
-    }
-
-    /**
-     * Used to restore global arrays before handling errors by Tracy
-     *
-     * @param $exception
-     * @param bool $exit
-     * @internal
-     */
-    public function tracyExceptionHandler($exception, $exit = true)
-    {
-        $this->restoreGlobalArrays();
-        Debugger::exceptionHandler($exception, $exit);
-    }
-
-    /**
-     * Used to restore global arrays before handling errors by Tracy
-     *
-     * @param $severity
-     * @param $message
-     * @param $file
-     * @param $line
-     * @param array $context
-     * @throws \ErrorException
-     * @internal
-     */
-    public function tracyErrorHandler($severity, $message, $file, $line, $context = [])
-    {
-        $this->restoreGlobalArrays();
-        Debugger::errorHandler($severity, $message, $file, $line, $context);
     }
 
     /**

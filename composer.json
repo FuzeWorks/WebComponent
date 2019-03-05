@@ -14,10 +14,11 @@
   ],
   "require": {
     "php": ">=7.1.0",
-    "fuzeworks/mvcr": "1.2.0-RC2",
-    "fuzeworks/core": "1.2.0-RC2"
+    "fuzeworks/mvcr": "1.2.0-RC3",
+    "fuzeworks/core": "1.2.0-RC3"
   },
   "minimum-stability": "RC",
+  "prefer-stable": true,
   "require-dev": {
     "phpunit/phpunit": "^7"
   },

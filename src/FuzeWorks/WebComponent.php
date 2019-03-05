@@ -39,6 +39,7 @@ namespace FuzeWorks;
 use FuzeWorks\Event\HaltExecutionEvent;
 use FuzeWorks\Event\LayoutLoadEvent;
 use FuzeWorks\Event\RouterCallViewEvent;
+use FuzeWorks\Exception\ConfigException;
 use FuzeWorks\Exception\CSRFException;
 use FuzeWorks\Exception\EventException;
 use FuzeWorks\Exception\Exception;
@@ -133,10 +134,10 @@ class WebComponent implements iComponent
      * appends output and adds listener to view output on shutdown.
      *
      * @return bool
-     * @throws HaltException
      * @throws OutputException
      * @throws RouterException
      * @throws WebException
+     * @throws EventException
      */
     public function routeWebRequest(): bool
     {
@@ -158,6 +159,9 @@ class WebComponent implements iComponent
             throw new WebException("Could not route web request. coreShutdownEvent threw EventException: '".$e->getMessage()."'");
         }
 
+        // Remove the X-Powered-By header, since it's a security risk
+        header_remove("X-Powered-By");
+
         /** @var Router $router */
         /** @var URI $uri */
         /** @var Output $output */
@@ -169,6 +173,11 @@ class WebComponent implements iComponent
 
         // And start logging the request
         Logger::newLevel("Routing web request...");
+
+        // First check if a cached page is available
+        $uriString = $uri->uriString();
+        if ($output->getCache($uriString))
+            return true;
 
         // First test for Cross Site Request Forgery
         try {
@@ -183,7 +192,6 @@ class WebComponent implements iComponent
 
         // Attempt to load the requested page
         try {
-            $uriString = $uri->uriString();
             $viewOutput = $router->route($uriString);
         } catch (NotFoundException $e) {
             Logger::logWarning("Requested page not found. Requesting Error/error404 View");
@@ -256,6 +264,8 @@ class WebComponent implements iComponent
      * Fired when FuzeWorks halts it's execution. Loads an error 500 page.
      *
      * @param $event
+     * @throws EventException
+     * @TODO remove FuzeWorks\Layout dependency
      */
     public function haltEventListener(HaltExecutionEvent $event)
     {
@@ -263,11 +273,16 @@ class WebComponent implements iComponent
         /** @var Output $output */
         /** @var Router $router */
         /** @var Event $event */
+        /** @var Layout $layout */
         $output = Factory::getInstance()->output;
         $router = Factory::getInstance()->router;
+        $layout = Factory::getInstance()->layouts;
 
         // Cancel event
         $event->setCancelled(true);
+
+        // Reset the layout engine
+        $layout->reset();
 
         // Remove listener so that error pages won't be intercepted
         Events::removeListener([$this, 'callViewEventListener'], 'routerCallViewEvent',Priority::HIGHEST);
@@ -291,10 +306,10 @@ class WebComponent implements iComponent
      *
      * Assigns variables from the WebComponent to Layout engines.
      *
-     * @param $event
-     * @throws Exception\ConfigException
+     * @param LayoutLoadEvent $event
+     * @throws ConfigException
      */
-    public function layoutLoadEventListener(LayoutLoadEvent $event)
+    public function layoutLoadEventListener($event)
     {
         // Dependencies
         /** @var Security $security */
