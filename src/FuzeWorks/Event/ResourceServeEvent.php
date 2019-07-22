@@ -37,17 +37,27 @@
 namespace FuzeWorks\Event;
 use FuzeWorks\Event;
 
-class RouteWebRequestEvent extends Event
+class ResourceServeEvent extends Event
 {
+    /**
+     * @var string
+     */
+    public $resourceName;
+
+    /**
+     * @var array
+     */
+    public $resourceUrlSegments;
 
     /**
      * @var string
      */
-    public $uriString;
+    public $resourceFilePath;
 
-    public function init(string $uriString)
+    public function init(string $resourceName, array $resourceUrlSegments, string $resourceFilePath)
     {
-        $this->uriString = $uriString;
+        $this->resourceName = $resourceName;
+        $this->resourceUrlSegments = $resourceUrlSegments;
+        $this->resourceFilePath = $resourceFilePath;
     }
-
 }
