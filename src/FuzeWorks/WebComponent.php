@@ -151,6 +151,7 @@ class WebComponent implements iComponent
                 Logger::logInfo("Parsing output...");
                 $output = Factory::getInstance()->output;
                 $output->display();
+                return $event;
             }, 'coreShutdownEvent', Priority::NORMAL);
 
             // Create an error 500 page when a haltEvent is fired
@@ -177,6 +178,11 @@ class WebComponent implements iComponent
         // First check if a cached page is available
         $uriString = $uri->uriString();
         if ($output->getCache($uriString))
+            return true;
+
+        // Send webRequestEvent, if no cache is found
+        $event = Events::fireEvent('routeWebRequestEvent', $uriString);
+        if ($event->isCancelled())
             return true;
 
         // First test for Cross Site Request Forgery
@@ -321,6 +327,7 @@ class WebComponent implements iComponent
         $event->assign('csrfHash', $security->get_csrf_hash());
         $event->assign('csrfTokenName', $security->get_csrf_token_name());
         $event->assign('siteURL', $config->getConfig('web')->get('base_url'));
+        $event->assign('serverName', $config->getConfig('web')->get('serverName'));
 
         Logger::logInfo("Assigned variables to TemplateEngine from WebComponent");
     }
