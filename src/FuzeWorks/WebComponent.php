@@ -39,6 +39,7 @@ namespace FuzeWorks;
 use FuzeWorks\Event\HaltExecutionEvent;
 use FuzeWorks\Event\LayoutLoadEvent;
 use FuzeWorks\Event\RouterCallViewEvent;
+use FuzeWorks\Event\RouteWebRequestEvent;
 use FuzeWorks\Exception\ConfigException;
 use FuzeWorks\Exception\CSRFException;
 use FuzeWorks\Exception\EventException;
@@ -72,6 +73,7 @@ class WebComponent implements iComponent
             'input' => '\FuzeWorks\Input',
             'output' => '\FuzeWorks\Output',
             'uri' => '\FuzeWorks\URI',
+            'resources' => '\FuzeWorks\Resources'
         ];
     }
 
@@ -151,6 +153,7 @@ class WebComponent implements iComponent
                 Logger::logInfo("Parsing output...");
                 $output = Factory::getInstance()->output;
                 $output->display();
+                return $event;
             }, 'coreShutdownEvent', Priority::NORMAL);
 
             // Create an error 500 page when a haltEvent is fired
@@ -166,10 +169,12 @@ class WebComponent implements iComponent
         /** @var URI $uri */
         /** @var Output $output */
         /** @var Security $security */
+        /** @var Resources $resources */
         $router = Factory::getInstance()->router;
         $uri = Factory::getInstance()->uri;
         $output = Factory::getInstance()->output;
         $security = Factory::getInstance()->security;
+        $resources = Factory::getInstance()->resources;
 
         // And start logging the request
         Logger::newLevel("Routing web request...");
@@ -177,6 +182,16 @@ class WebComponent implements iComponent
         // First check if a cached page is available
         $uriString = $uri->uriString();
         if ($output->getCache($uriString))
+            return true;
+
+        // Send webRequestEvent, if no cache is found
+        /** @var RouteWebRequestEvent $event */
+        $event = Events::fireEvent('routeWebRequestEvent', $uriString);
+        if ($event->isCancelled())
+            return true;
+
+        // Attempt to load a static resource
+        if ($resources->serveResource($uri->segmentArray()))
             return true;
 
         // First test for Cross Site Request Forgery
@@ -200,7 +215,7 @@ class WebComponent implements iComponent
             // Remove listener so that error pages won't be intercepted
             Events::removeListener([$this, 'callViewEventListener'], 'routerCallViewEvent',Priority::HIGHEST);
 
-            // Request 404 page=
+            // Request 404 page
             try {
                 $viewOutput = $router->route('Error/error404');
             } catch (NotFoundException $e) {
@@ -321,6 +336,7 @@ class WebComponent implements iComponent
         $event->assign('csrfHash', $security->get_csrf_hash());
         $event->assign('csrfTokenName', $security->get_csrf_token_name());
         $event->assign('siteURL', $config->getConfig('web')->get('base_url'));
+        $event->assign('serverName', $config->getConfig('web')->get('serverName'));
 
         Logger::logInfo("Assigned variables to TemplateEngine from WebComponent");
     }

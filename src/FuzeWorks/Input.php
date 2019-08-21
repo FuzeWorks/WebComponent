@@ -75,6 +75,9 @@ class Input
         if (!WebComponent::$willHandleRequest)
             return;
 
+        // Start session
+        session_start();
+
         // Sanitize all global arrays
         $this->sanitizeGlobals();
 
