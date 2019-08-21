@@ -14,8 +14,8 @@
   ],
   "require": {
     "php": ">=7.1.0",
-    "fuzeworks/mvcr": "1.2.0-RC3",
-    "fuzeworks/core": "1.2.0-RC3"
+    "fuzeworks/mvcr": "1.2.0-RC4",
+    "fuzeworks/core": "1.2.0-RC4"
   },
   "minimum-stability": "RC",
   "prefer-stable": true,
