@@ -60,8 +60,8 @@ class URI
     private $input;
 
     protected $baseUri;
-    protected $uriString;
-    protected $segments;
+    protected $uriString = '';
+    protected $segments = [];
 
     public function init()
     {
