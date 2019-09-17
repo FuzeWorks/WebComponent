@@ -39,11 +39,12 @@ namespace FuzeWorks;
 use FuzeWorks\Event\HaltExecutionEvent;
 use FuzeWorks\Event\LayoutLoadEvent;
 use FuzeWorks\Event\RouterCallViewEvent;
+use FuzeWorks\Event\RouterLoadViewAndControllerEvent;
 use FuzeWorks\Event\RouteWebRequestEvent;
 use FuzeWorks\Exception\ConfigException;
-use FuzeWorks\Exception\CSRFException;
 use FuzeWorks\Exception\EventException;
 use FuzeWorks\Exception\Exception;
+use FuzeWorks\Exception\FactoryException;
 use FuzeWorks\Exception\HaltException;
 use FuzeWorks\Exception\NotFoundException;
 use FuzeWorks\Exception\OutputException;
@@ -140,6 +141,7 @@ class WebComponent implements iComponent
      * @throws RouterException
      * @throws WebException
      * @throws EventException
+     * @throws FactoryException
      */
     public function routeWebRequest(): bool
     {
@@ -156,6 +158,17 @@ class WebComponent implements iComponent
                 return $event;
             }, 'coreShutdownEvent', Priority::NORMAL);
 
+            // Add HTTP method prefix to requests to views
+            Events::addListener(function($event){
+                /** @var Input $input */
+                /** @var RouterLoadViewAndControllerEvent $event */
+                $input = Factory::getInstance('input');
+                $methods = $event->viewMethods[Priority::NORMAL];
+                foreach ($methods as $method)
+                    $event->addMethod(strtolower($input->method()) . '_' . $method);
+                return $event;
+            }, 'routerLoadViewAndControllerEvent', Priority::NORMAL);
+
             // Create an error 500 page when a haltEvent is fired
             Events::addListener([$this, 'haltEventListener'], 'haltExecutionEvent', Priority::NORMAL);
         } catch (EventException $e) {
@@ -170,11 +183,11 @@ class WebComponent implements iComponent
         /** @var Output $output */
         /** @var Security $security */
         /** @var Resources $resources */
-        $router = Factory::getInstance()->router;
-        $uri = Factory::getInstance()->uri;
-        $output = Factory::getInstance()->output;
-        $security = Factory::getInstance()->security;
-        $resources = Factory::getInstance()->resources;
+        $router = Factory::getInstance('router');
+        $uri = Factory::getInstance('uri');
+        $output = Factory::getInstance('output');
+        $security = Factory::getInstance('security');
+        $resources = Factory::getInstance('resources');
 
         // And start logging the request
         Logger::newLevel("Routing web request...");
@@ -207,7 +220,7 @@ class WebComponent implements iComponent
 
         // Attempt to load the requested page
         try {
-            $viewOutput = $router->route($uriString);
+            $viewOutput = $router->route($event->uriString);
         } catch (NotFoundException $e) {
             Logger::logWarning("Requested page not found. Requesting Error/error404 View");
             $output->setStatusHeader(404);
@@ -280,6 +293,7 @@ class WebComponent implements iComponent
      *
      * @param $event
      * @throws EventException
+     * @throws FactoryException
      * @TODO remove FuzeWorks\Layout dependency
      */
     public function haltEventListener(HaltExecutionEvent $event)
@@ -323,6 +337,7 @@ class WebComponent implements iComponent
      *
      * @param LayoutLoadEvent $event
      * @throws ConfigException
+     * @throws FactoryException
      */
     public function layoutLoadEventListener($event)
     {
