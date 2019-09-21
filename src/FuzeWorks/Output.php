@@ -38,9 +38,11 @@ namespace FuzeWorks;
 
 
 use FuzeWorks\ConfigORM\ConfigORM;
-use FuzeWorks\Event\HelperLoadEvent;
 use FuzeWorks\Exception\OutputException;
 
+/**
+ * @todo Implement caching
+ */
 class Output
 {
 
@@ -50,6 +52,13 @@ class Output
      * @var Input
      */
     private $input;
+
+    /**
+     * The internal URI class
+     *
+     * @var URI
+     */
+    private $uri;
 
     /**
      * WebCfg
@@ -82,17 +91,237 @@ class Output
     public $mimes = [];
     protected $mimeType = 'text/html';
 
+    /**
+     * The amount of time the current page is cached
+     *
+     * @var int $cacheTime
+     */
+    protected $cacheTime = 0;
+
+    /**
+     * Whether a cache file is being used now
+     *
+     * @var bool
+     */
+    protected $usingCache = false;
+
+    /**
+     * The status code that will be sent to the client
+     *
+     * @var int $statusCode
+     */
     protected $statusCode = 200;
+
+    /**
+     * The status code text that will be sent along with $statusCode
+     *
+     * @var string $statusText
+     */
     protected $statusText = 'OK';
 
     public function init()
     {
         $this->input = Factory::getInstance()->input;
+        $this->uri = Factory::getInstance()->uri;
         $this->mimes = Factory::getInstance()->config->getConfig('mimes')->toArray();
         $this->config = Factory::getInstance()->config->getConfig('web');
 
         $zlib = (bool) ini_get('zlib.output_compression');
         $this->compressOutput = (!$zlib && $this->config->get('compress_output') && extension_loaded('zlib'));
+    }
+
+    /**
+     * Display Output
+     *
+     * Processes and sends finalized output data to the browser along
+     * with any server headers.
+     *
+     * @param	string	$output	Output data override
+     * @return	void
+     */
+    public function display(string $output = null)
+    {
+        // Set the output data
+        $output = is_null($output) ? $this->output : $output;
+
+        // Write cache if requested to do so
+        if ($this->cacheTime > 0)
+            $this->writeCache($output);
+
+        // First send status code
+        http_response_code($this->statusCode);
+        @header('Status: ' . $this->statusCode . ' ' . $this->statusText, true);
+
+        // If compression is requested, start buffering
+        if (
+            $this->compressOutput && !$this->usingCache &&
+            !is_null($this->input->server('HTTP_ACCEPT_ENCODING')) &&
+            strpos($this->input->server('HTTP_ACCEPT_ENCODING'), 'gzip') !== false
+        )
+        {
+            Logger::log("Compressing output...");
+            ob_start('ob_gzhandler');
+        }
+
+        // Send gzip headers when using cache
+        if ($this->usingCache && $this->compressOutput)
+        {
+            if (!is_null($this->input->server('HTTP_ACCEPT_ENCODING')) &&
+                strpos($this->input->server('HTTP_ACCEPT_ENCODING'), 'gzip') !== false)
+            {
+                header('Content-Encoding: gzip');
+                header('Content-Length: '.strlen($output));
+            }
+            // If the cache is zipped, but the client doesn't support it, decompress the output
+            else
+                $output = gzinflate(substr($output, 10, -8));
+        }
+
+        // Send all available headers
+        if (!empty($this->headers))
+            foreach ($this->headers as $header)
+                @header($header[0], $header[1]);
+
+        echo $output;
+
+        Logger::log('Output sent to browser');
+    }
+
+    /**
+     * Enable the current page to be cached
+     *
+     * Set the amount of time with the $time parameter.
+     *
+     * @param int $time In minutes
+     */
+    public function cache(int $time)
+    {
+        $this->cacheTime = $time > 0 ? $time : 0;
+    }
+
+    public function getCache(string $selector): bool
+    {
+        // If empty, index page is requested
+        $selector = empty($selector) ? 'index' : $selector;
+
+        // Generate the full uri
+        $uri = $this->config->get('base_url') . $selector;
+
+        // Determine the file that holds the cache
+        if ($this->compressOutput)
+            $file = Core::$tempDir . DS . 'OutputCache' . DS . md5($uri) . '_gzip.fwcache';
+        else
+            $file = Core::$tempDir . DS . 'OutputCache' . DS . md5($uri) . '.fwcache';
+
+
+        // Determine if file exists
+        if (!file_exists($file))
+            return false;
+
+        // Retrieve cache
+        $cache = file_get_contents($file);
+
+        // Verify that this is a cache file
+        if (!preg_match('/^(.*)EndFuzeWorksCache--->/', $cache, $match))
+            return false;
+
+        // Retrieve data from cache file
+        $cacheInfo = unserialize($match[1]);
+
+        // Test if the cache has expired
+        if (time() > $cacheInfo['expire'])
+        {
+            // If not writeable, log warning and do not remove
+            if (!Core::isReallyWritable($file))
+            {
+                Logger::logWarning("Found expired output cache. Could not remove!");
+                return false;
+            }
+
+            // Delete file if expired
+            @unlink($file);
+            Logger::logInfo("Found expired output cache. Removed.");
+            return false;
+        }
+
+        // @todo Send cache header
+
+        // Send all the headers cached in the file
+        foreach ($cacheInfo['headers'] as $header)
+            $this->setHeader($header[0], $header[1]);
+
+        // And save the output
+        $this->usingCache = true;
+        $this->setOutput(substr($cache, strlen($match[0])));
+        Logger::logInfo("Found output cache. Set output.");
+        return true;
+    }
+
+    public function writeCache(string $output)
+    {
+        // First create cache directory
+        $cachePath = Core::$tempDir . DS . 'OutputCache';
+
+        // Attempt to create the OutputCache directory in the TempDirectory
+        if (!is_dir($cachePath) && !mkdir($cachePath, 0777, false))
+        {
+            Logger::logError("Could not write output cache. Cannot create directory. Are permissions set correctly?");
+            return false;
+        }
+
+        // If directory is not writable, return error
+        if (!Core::isReallyWritable($cachePath))
+        {
+            Logger::logError("Could not write output cache. No file permissions. Are permissions set correctly?");
+            return false;
+        }
+
+        // Generate the full uri
+        $uri = $this->config->get('base_url') . (empty($this->uri->uriString()) ? 'index' : $this->uri->uriString());
+
+        // Determine the file that holds the cache
+        if ($this->compressOutput)
+            $file = $cachePath . DS . md5($uri) . '_gzip.fwcache';
+        else
+            $file = $cachePath . DS . md5($uri) . '.fwcache';
+
+
+        // If compression is enabled, compress the output
+        if ($this->compressOutput)
+        {
+            $output = gzencode($output);
+            if ($this->getHeader('content-type') === null)
+                $this->setContentType($this->mimeType);
+        }
+
+        // Calculate expiry time
+        $expire = time() + ($this->cacheTime * 60);
+
+        // Prepare the cache contents
+        $cache = [
+            'expire' => $expire,
+            'headers' => $this->headers
+        ];
+
+        // Create cache file contents
+        $cache = serialize($cache) . 'EndFuzeWorksCache--->' . $output;
+
+        // Write the cache
+        if (file_put_contents($file, $cache, LOCK_EX) === false)
+        {
+            @unlink($file);
+            Logger::logError("Could not write output cache. File error. Deleting cache file.");
+            return false;
+        }
+
+        // Lowering permissions to read only
+        chmod($cachePath, 0640);
+
+        // And report back
+        Logger::logInfo("Output cache has been saved.");
+
+        // @todo Set cache header
+        return true;
     }
 
     /**
@@ -133,45 +362,6 @@ class Output
     }
 
     /**
-     * Display Output
-     *
-     * Processes and sends finalized output data to the browser along
-     * with any server headers.
-     *
-     * @param	string	$output	Output data override
-     * @return	void
-     */
-    public function display(string $output = null)
-    {
-        // Set the output data
-        $output = is_null($output) ? $this->output : $output;
-
-        // First send status code
-        http_response_code($this->statusCode);
-        @header('Status: ' . $this->statusCode . ' ' . $this->statusText, true);
-
-        // If compression is requested, start buffering
-        if (
-            $this->compressOutput &&
-            !is_null($this->input->server('HTTP_ACCEPT_ENCODING')) &&
-            strpos($this->input->server('HTTP_ACCEPT_ENCODING'), 'gzip') !== false
-        )
-        {
-            Logger::log("Compressing output...");
-            ob_start('ob_gzhandler');
-        }
-
-        // Send all available headers
-        if (!empty($this->headers))
-            foreach ($this->headers as $header)
-                @header($header[0], $header[1]);
-
-        echo $output;
-
-        Logger::log('Output sent to browser');
-    }
-
-    /**
      * Set Header
      *
      * Lets you set a server header which will be sent with the final output.
@@ -181,6 +371,11 @@ class Output
      */
     public function setHeader(string $header, bool $replace = true)
     {
+        // If compression is enabled content-length should be suppressed, since it won't match the length
+        // of the compressed output.
+        if ($this->compressOutput && strncasecmp($header, 'content-length', 14) === 0)
+            return;
+
         $this->headers[] = [$header, $replace];
     }
 
@@ -214,7 +409,6 @@ class Output
      * @param	string	$mimeType	Extension of the file we're outputting
      * @param	string	$charset	Character set (default: NULL)
      */
-
     public function setContentType(string $mimeType, $charset = null)
     {
         if (strpos($mimeType, '/') === false)

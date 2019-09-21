@@ -34,8 +34,30 @@
  * @version Version 1.2.0
  */
 
-namespace FuzeWorks;
+namespace FuzeWorks\Event;
+use FuzeWorks\Event;
 
-abstract class WebController extends Controller
+class ResourceServeEvent extends Event
 {
+    /**
+     * @var string
+     */
+    public $resourceName;
+
+    /**
+     * @var array
+     */
+    public $resourceUrlSegments;
+
+    /**
+     * @var string
+     */
+    public $resourceFilePath;
+
+    public function init(string $resourceName, array $resourceUrlSegments, string $resourceFilePath)
+    {
+        $this->resourceName = $resourceName;
+        $this->resourceUrlSegments = $resourceUrlSegments;
+        $this->resourceFilePath = $resourceFilePath;
+    }
 }

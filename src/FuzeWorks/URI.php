@@ -60,17 +60,15 @@ class URI
     private $input;
 
     protected $baseUri;
-    protected $uriString;
-    protected $segments;
+    protected $uriString = '';
+    protected $segments = [];
 
     public function init()
     {
         $this->input = Factory::getInstance()->input;
         $this->config = Factory::getInstance()->config->getConfig('web');
         if (WebComponent::$willHandleRequest)
-        {
             $this->determineUri();
-        }
     }
 
     public function determineUri()
@@ -86,7 +84,7 @@ class URI
 
                 $scriptName = $this->input->server('SCRIPT_NAME');
                 $scriptFilename = $this->input->server('SCRIPT_FILENAME');
-                $baseUrl = ($this->isHttps() ? 'https' : 'http') .
+                $baseUrl = ($this->input->isHttps() ? 'https' : 'http') .
                     "://" . $serverAddr .
                     substr($scriptName, 0, strpos($scriptName, basename($scriptFilename)));
             }
@@ -222,33 +220,6 @@ class URI
         }
 
         return true;
-    }
-
-    /**
-     * Is HTTPS?
-     *
-     * Determines if the application is accessed via an encrypted
-     * (HTTPS) connection.
-     *
-     * @return  bool
-     */
-    protected function isHttps(): bool
-    {
-        $https = $this->input->server('HTTPS');
-        if (!is_null($https) && strtolower($https) !== 'off')
-        {
-            return true;
-        }
-        elseif (!is_null($this->input->server('HTTP_X_FORWARDED_PROTO')) && $this->input->server('HTTP_X_FORWARDED_PROTO') === 'https')
-        {
-            return true;
-        }
-        elseif ( ! is_null($this->input->server('HTTP_FRONT_END_HTTPS')) && strtolower($this->input->server('HTTP_FRONT_END_HTTPS')) !== 'off')
-        {
-            return true;
-        }
-
-        return false;
     }
 
 }

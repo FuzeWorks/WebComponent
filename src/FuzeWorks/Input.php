@@ -1,4 +1,4 @@
-<?php /** @noinspection ALL */
+<?php
 
 /**
  * FuzeWorks WebComponent.
@@ -38,8 +38,10 @@
 namespace FuzeWorks;
 
 use FuzeWorks\ConfigORM\ConfigORM;
-use Tracy\Debugger;
 
+/**
+ * @todo Implement remaining methods from OldInput
+ */
 class Input
 {
     /**
@@ -69,6 +71,13 @@ class Input
         // Set the configuration
         $this->webConfig = Factory::getInstance()->config->getConfig('web');
 
+        // If not handling requests, do not continue
+        if (!WebComponent::$willHandleRequest)
+            return;
+
+        // Start session
+        session_start();
+
         // Sanitize all global arrays
         $this->sanitizeGlobals();
 
@@ -76,8 +85,8 @@ class Input
         {
             if (class_exists('\FuzeWorks\TracyComponent', true) && \FuzeWorks\TracyComponent::isEnabled())
             {
-                set_exception_handler([$this, 'tracyExceptionHandler']);
-                set_error_handler([$this, 'tracyErrorHandler']);
+                Core::addExceptionHandler([$this, 'restoreGlobalArrays'], Priority::HIGHEST);
+                Core::addErrorHandler([$this, 'restoreGlobalArrays'], Priority::HIGHEST);
             }
             Events::addListener(
                 [$this, 'restoreGlobalArrays'],
@@ -87,35 +96,10 @@ class Input
     }
 
     /**
-     * Used to restore global arrays before handling errors by Tracy
+     * Restores global arrays before handling by processes outside of FuzeWorks
      *
-     * @param $exception
-     * @param bool $exit
      * @internal
      */
-    public function tracyExceptionHandler($exception, $exit = true)
-    {
-        $this->restoreGlobalArrays();
-        Debugger::exceptionHandler($exception, $exit);
-    }
-
-    /**
-     * Used to restore global arrays before handling errors by Tracy
-     *
-     * @param $severity
-     * @param $message
-     * @param $file
-     * @param $line
-     * @param array $context
-     * @throws \ErrorException
-     * @internal
-     */
-    public function tracyErrorHandler($severity, $message, $file, $line, $context = [])
-    {
-        $this->restoreGlobalArrays();
-        Debugger::errorHandler($severity, $message, $file, $line, $context);
-    }
-
     public function restoreGlobalArrays()
     {
         Logger::logInfo('Restoring global $_GET, $_POST, $_SERVER, $_COOKIE arrays');
@@ -235,6 +219,8 @@ class Input
     }
 
     /**
+     * Used to fetch variables from the global arrays
+     *
      * @param string $arrayName
      * @param null $index
      * @param bool $xssClean
@@ -242,8 +228,8 @@ class Input
      */
     protected function getFromInputArray(string $arrayName, $index = null, bool $xssClean = true)
     {
-        // Clean XSS if requested manually or forced through configuration
-        $xssClean = $xssClean || $this->webConfig->get('xss_clean');
+        // Never run XSS clean if disabled by config
+        $xssClean = ($this->webConfig->get('xss_clean') == true ? $xssClean : false);
 
         // If the index is null, the entire array is requested
         $index = (!is_null($index) ? $index : array_keys($this->inputArray[$arrayName]));
@@ -266,59 +252,124 @@ class Input
         return ($xssClean === true ? $this->security->xss_clean($value) : $value);
     }
 
+    /**
+     * Fetch variables from the global $_GET array
+     *
+     * @param string|array|null $index
+     * @param bool $xssClean
+     * @return mixed
+     */
     public function get($index = null, bool $xssClean = true)
     {
         return $this->getFromInputArray('get', $index, $xssClean);
     }
 
+    /**
+     * Fetch variables from the global $_POST array
+     *
+     * @param string|array|null $index
+     * @param bool $xssClean
+     * @return mixed
+     */
     public function post($index = null, bool $xssClean = true)
     {
         return $this->getFromInputArray('post', $index, $xssClean);
     }
 
+    /**
+     * Fetch variables from the global $_POST or $_GET array. Tries POST first
+     *
+     * @param string|array|null $index
+     * @param bool $xssClean
+     * @return mixed
+     */
     public function postGet($index, bool $xssClean = true)
     {
         return isset($this->inputArray['post'][$index]) ? $this->post($index, $xssClean) : $this->get($index, $xssClean);
     }
 
+    /**
+     * Fetch variables from the global $_GET or $_POST array. Tries GET first
+     *
+     * @param string|array|null $index
+     * @param bool $xssClean
+     * @return mixed
+     */
     public function getPost($index, bool $xssClean = true)
     {
         return isset($this->inputArray['get'][$index]) ? $this->get($index, $xssClean) : $this->post($index, $xssClean);
     }
 
+    /**
+     * Fetch variables from the global $_COOKIE array
+     *
+     * @param string|array|null $index
+     * @param bool $xssClean
+     * @return mixed
+     */
     public function cookie($index = null, bool $xssClean = true)
     {
         return $this->getFromInputArray('cookie', $index, $xssClean);
     }
 
+    /**
+     * Fetch variables from the global $_SERVER array
+     *
+     * @param string|array|null $index
+     * @param bool $xssClean
+     * @return mixed
+     */
     public function server($index = null, bool $xssClean = true)
     {
         return $this->getFromInputArray('server', $index, $xssClean);
     }
 
     /**
-     * @todo Extend with OldInput functionality
+     * Fetch the HTTP_USER_AGENT variable from the $_SERVER array
+     *
+     * @param string|array|null $index
+     * @param bool $xssClean
+     * @return mixed
      */
-    public function ip()
-    {
-        $ip = '';
-        // Validate IP
-
-        $valid = (
-            (bool)filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) ||
-            (bool)filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)
-        );
-    }
-
     public function userAgent(bool $xssClean = true): string
     {
         return $this->getFromInputArray('server', 'HTTP_USER_AGENT', $xssClean);
     }
 
+    /**
+     * Fetch the REQUEST_METHOD variable from the $_SERVER array
+     *
+     * @param string|array|null $index
+     * @param bool $xssClean
+     * @return mixed
+     */
     public function method(bool $xssClean = true): string
     {
         return $this->getFromInputArray('server', 'REQUEST_METHOD', $xssClean);
     }
+
+    /**
+     * Is HTTPS?
+     *
+     * Determines if the application is accessed via an encrypted
+     * (HTTPS) connection.
+     *
+     * @return  bool
+     */
+    public function isHttps(): bool
+    {
+        if (!empty($this->inputArray['server']['HTTPS']) && strtolower($this->inputArray['server']['HTTPS']) !== 'off')
+            return true;
+
+        elseif (isset($this->inputArray['server']['HTTP_X_FORWARDED_PROTO']) && $this->inputArray['server']['HTTP_X_FORWARDED_PROTO'] === 'https')
+            return true;
+
+        elseif ( ! empty($this->inputArray['server']['HTTP_FRONT_END_HTTPS']) && strtolower($this->inputArray['server']['HTTP_FRONT_END_HTTPS']) !== 'off')
+            return true;
+
+        return false;
+    }
+
 
 
 }

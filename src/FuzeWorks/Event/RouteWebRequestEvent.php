@@ -34,8 +34,20 @@
  * @version Version 1.2.0
  */
 
-namespace FuzeWorks;
+namespace FuzeWorks\Event;
+use FuzeWorks\Event;
 
-abstract class WebController extends Controller
+class RouteWebRequestEvent extends Event
 {
+
+    /**
+     * @var string
+     */
+    public $uriString;
+
+    public function init(string $uriString)
+    {
+        $this->uriString = $uriString;
+    }
+
 }

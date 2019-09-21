@@ -1,6 +1,6 @@
 <?php
 /**
- * FuzeWorks WebComponent.
+ * FuzeWorks Component.
  *
  * The FuzeWorks PHP FrameWork
  *
@@ -34,8 +34,9 @@
  * @version Version 1.2.0
  */
 
-namespace FuzeWorks;
+namespace FuzeWorks\Exception;
 
-abstract class WebController extends Controller
+
+class CSRFException extends SecurityException
 {
 }
