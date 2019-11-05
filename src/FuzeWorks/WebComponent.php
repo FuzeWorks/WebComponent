@@ -37,6 +37,7 @@
 namespace FuzeWorks;
 
 use FuzeWorks\Event\HaltExecutionEvent;
+use FuzeWorks\Event\LayoutDisplayEvent;
 use FuzeWorks\Event\LayoutLoadEvent;
 use FuzeWorks\Event\RouterCallViewEvent;
 use FuzeWorks\Event\RouterLoadViewAndControllerEvent;
@@ -157,6 +158,15 @@ class WebComponent implements iComponent
                 $output->display();
                 return $event;
             }, 'coreShutdownEvent', Priority::NORMAL);
+
+            // Intercept output of Layout and redirect it to Output
+            Events::addListener(function($event){
+                /** @var $event LayoutDisplayEvent */
+                /** @var Output $output */
+                $output = Factory::getInstance('output');
+                $output->appendOutput($event->contents);
+                $event->setCancelled(true);
+            }, 'layoutDisplayEvent', Priority::NORMAL);
 
             // Add HTTP method prefix to requests to views
             Events::addListener(function($event){
