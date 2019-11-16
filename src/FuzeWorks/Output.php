@@ -201,18 +201,22 @@ class Output
 
     public function getCache(string $selector): bool
     {
-        // If empty, index page is requested
-        $selector = empty($selector) ? 'index' : $selector;
+        // If output cache is disabled, don't return a cache result
+        if ($this->config->get('cache_output') !== true)
+            return false;
 
         // Generate the full uri
-        $uri = $this->config->get('base_url') . $selector;
+        $uri = $this->config->get('base_url') . (empty($selector) ? 'index' : $selector);
+        $getParams = $this->input->get();
+
+        // Determine the identifier
+        $identier = md5($uri . '|' . serialize($getParams));
 
         // Determine the file that holds the cache
         if ($this->compressOutput)
-            $file = Core::$tempDir . DS . 'OutputCache' . DS . md5($uri) . '_gzip.fwcache';
+            $file = Core::$tempDir . DS . 'OutputCache' . DS . $identier . '_gzip.fwcache';
         else
-            $file = Core::$tempDir . DS . 'OutputCache' . DS . md5($uri) . '.fwcache';
-
+            $file = Core::$tempDir . DS . 'OutputCache' . DS . $identier . '.fwcache';
 
         // Determine if file exists
         if (!file_exists($file))
@@ -259,6 +263,10 @@ class Output
 
     public function writeCache(string $output)
     {
+        // If output cache is disabled, don't create a cache entry
+        if ($this->config->get('cache_output') !== true)
+            return false;
+
         // First create cache directory
         $cachePath = Core::$tempDir . DS . 'OutputCache';
 
@@ -278,12 +286,16 @@ class Output
 
         // Generate the full uri
         $uri = $this->config->get('base_url') . (empty($this->uri->uriString()) ? 'index' : $this->uri->uriString());
+        $getParams = $this->input->get();
+
+        // Determine the identifier
+        $identier = md5($uri . '|' . serialize($getParams));
 
         // Determine the file that holds the cache
         if ($this->compressOutput)
-            $file = $cachePath . DS . md5($uri) . '_gzip.fwcache';
+            $file = $cachePath . DS . $identier . '_gzip.fwcache';
         else
-            $file = $cachePath . DS . md5($uri) . '.fwcache';
+            $file = $cachePath . DS . $identier . '.fwcache';
 
 
         // If compression is enabled, compress the output

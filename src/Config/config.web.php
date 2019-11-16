@@ -34,13 +34,32 @@
  * @version Version 1.2.0
  */
 return [
-    'allow_get_input' => true,
-    'empty_global_arrays' => true,
-    'restore_global_arrays' => true,
+    // General
     'base_url' => '',
+    'serverName' => 'FuzeWorks',
+
+    // Whether to allow GET parameters
+    'allow_get_input' => true,
+
+    // Clears the global $_GET, $_POST, $_COOKIE and $_SERVER arrays in order to prevent misuse
+    'empty_global_arrays' => true,
+
+    // Whether to restore the $_GET, $_POST, $_COOKIE and $_SERVER arrays when FuzeWorks shuts down
+    'restore_global_arrays' => true,
     'permitted_uri_chars' => 'a-z 0-9~%.:_\-',
     'charset' => 'UTF-8',
-    'compress_output' => false,
+
+    // Whether to gzip the output when the client supports it
+    'compress_output' => true,
+
+    // Global switch for output cache. To use, must be enabled in view as well
+    'cache_output' => true,
+    'xss_clean' => true,
+
+    // Cookie settings
     'cookie_prefix' => 'FWZ_',
-    'xss_clean' => true
+    'cookie_domain' => '',
+    'cookie_path' => '/',
+    'cookie_secure' => false,
+    'cookie_httponly' => false
 ];
