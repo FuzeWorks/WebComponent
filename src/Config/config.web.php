@@ -49,8 +49,11 @@ return [
     'permitted_uri_chars' => 'a-z 0-9~%.:_\-',
     'charset' => 'UTF-8',
 
+    // Whether to redirect http traffic to https
+    'redirect_to_https' => false,
+
     // Whether to gzip the output when the client supports it
-    'compress_output' => true,
+    'compress_output' => false,
 
     // Global switch for output cache. To use, must be enabled in view as well
     'cache_output' => true,

@@ -190,14 +190,31 @@ class WebComponent implements iComponent
 
         /** @var Router $router */
         /** @var URI $uri */
+        /** @var Input $input */
         /** @var Output $output */
         /** @var Security $security */
         /** @var Resources $resources */
+        /** @var Config $config */
         $router = Factory::getInstance('router');
         $uri = Factory::getInstance('uri');
+        $input = Factory::getInstance('input');
         $output = Factory::getInstance('output');
         $security = Factory::getInstance('security');
         $resources = Factory::getInstance('resources');
+        $config = Factory::getInstance('config');
+
+        // First check if this isn't https and we need to redirect
+        $redirect = $config->getConfig('web')->get('redirect_to_https');
+        if ($redirect && !$input->isHttps())
+        {
+            Logger::log("Redirecting http traffic to https...");
+            $httpsInputs = $input->server(['HTTPS', 'HTTP_HOST', 'REQUEST_URI']);
+            $location = 'https://' . $httpsInputs['HTTP_HOST'] . $httpsInputs['REQUEST_URI'];
+
+            $output->setStatusHeader(301);
+            $output->setHeader('Location: ' . $location);
+            return true;
+        }
 
         // And start logging the request
         Logger::newLevel("Routing web request...");

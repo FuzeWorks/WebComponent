@@ -145,7 +145,7 @@ class Output
         $output = is_null($output) ? $this->output : $output;
 
         // Write cache if requested to do so
-        if ($this->cacheTime > 0)
+        if ($this->cacheTime > 0 && !is_null($output))
             $this->writeCache($output);
 
         // First send status code
